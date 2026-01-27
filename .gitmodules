@@ -1,0 +1,6 @@
+[submodule ".vscode"]
+	path = .vscode
+	url = https://github.com/EffectiveRange/vscode-settings-cpp.git
+[submodule ".devcontainer"]
+	path = .devcontainer
+	url = https://github.com/EffectiveRange/devcontainer-defs.git

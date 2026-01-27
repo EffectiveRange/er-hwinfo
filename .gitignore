@@ -1,5 +1,11 @@
+**/build*/
+**/.devcbuild
+**/.cache
+**/dist
 # Prerequisites
 *.d
+
+**/coverage*/
 
 # Compiled Object files
 *.slo
@@ -10,12 +16,6 @@
 # Precompiled Headers
 *.gch
 *.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
 
 # Compiled Dynamic libraries
 *.so
@@ -37,5 +37,6 @@
 *.out
 *.app
 
-# debug information files
-*.dwo
+compile_commands.json
+
+**/*.pyc

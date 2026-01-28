@@ -25,17 +25,24 @@ else()
     message(FATAL_ERROR "No git tag found. Please create a tag (e.g., git tag v0.1.0)")
 endif()
 
-project(er_example_cpp VERSION ${proj_ver} DESCRIPTION "This project enables querying the GPIO pins for Effective Range hardware on Raspberry Pi devices." LANGUAGES CXX)
+project(er-hwinfo VERSION ${proj_ver} DESCRIPTION "This project enables querying the GPIO pins for Effective Range hardware on Raspberry Pi devices." LANGUAGES CXX)
 
 ER_DEPS()
 
 # Lookup dependencies and make them available to CMake
 find_package(fmt REQUIRED)
 find_package(Catch2  REQUIRED)
+find_package(RapidJSON REQUIRED)
 # This is a thin wrapper on top of vanilla cmake add_executable
 # it just marks the artifacts for installation automatically
 # so the binaries will be packaged without any other user interaction
 ER_ADD_EXECUTABLE(er-hwinfo SOURCES src/main.cpp)
+
+target_include_directories(er-hwinfo PRIVATE include)
+target_compile_definitions(er-hwinfo PRIVATE FMT_HEADER_ONLY)
+
+install(FILES resources/hwdb.json DESTINATION /etc/er-hwinfo)
+install(FILES resources/hwdb-schema.json DESTINATION /etc/er-hwinfo)
 
 
 # cross platform wrapper, to only enable running tests when the host arch == target arch

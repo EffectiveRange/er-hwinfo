@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EffectiveRange/er-hwinfo/main/resources/hwdb-schema.json",
+  "title": "Hardware Database",
+  "description": "Schema for hardware description database",
+  "type": "object",
+  "additionalProperties": {
+    "type": "array",
+    "description": "Array of hardware revisions for a given hardware type",
+    "items": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "description": "Semantic version of the hardware revision",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "pins": {
+          "type": "object",
+          "description": "Pin definitions for this hardware revision",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "Human-readable description of the pin's purpose"
+              },
+              "value": {
+                "type": "integer",
+                "description": "GPIO pin number",
+                "minimum": 0
+              }
+            },
+            "required": ["description", "value"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["revision", "pins"],
+      "additionalProperties": false
+    },
+    "minItems": 1
+  }
+}

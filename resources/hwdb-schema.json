@@ -4,11 +4,16 @@
   "title": "Hardware Database",
   "description": "Schema for hardware description database",
   "type": "object",
+  "propertyNames": {
+    "description": "Hardware type name",
+    "maxLength": 64
+  },
   "additionalProperties": {
     "type": "object",
     "description": "Hardware revisions keyed by semantic version string",
     "propertyNames": {
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "maxLength": 32
     },
     "additionalProperties": {
       "type": "object",
@@ -17,17 +22,23 @@
         "pins": {
           "type": "object",
           "description": "Pin definitions for this hardware revision",
+          "propertyNames": {
+            "description": "Pin name",
+            "maxLength": 64
+          },
           "additionalProperties": {
             "type": "object",
             "properties": {
               "description": {
                 "type": "string",
-                "description": "Human-readable description of the pin's purpose"
+                "description": "Human-readable description of the pin's purpose",
+                "maxLength": 256
               },
               "value": {
                 "type": "integer",
                 "description": "GPIO pin number",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 255
               }
             },
             "required": ["description", "value"],

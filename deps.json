@@ -1,11 +1,10 @@
 {
     "deps": [
-        "libstdc++6"
+        "libstdc++6",
+        "libfmt-dev",
+        "rapidjson-dev"
     ],
     "build_deps": [
-        "librange-v3-dev",
-        "libfmt-dev",
-        "catch2",
-        "rapidjson-dev"
+        "catch2"
     ]
 }

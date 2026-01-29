@@ -3,8 +3,9 @@
 #include <fmt/format.h>
 #include <iostream>
 
-int main() {
-  auto const dev = er::hwinfo::impl::get_device("/proc/device-tree");
+int main(int argc, char *argv[]) {
+  const char *dt_path = argc > 1 ? argv[1] : "/proc/device-tree";
+  auto const dev = er::hwinfo::impl::get_device(dt_path);
   if (dev) {
     std::cout << fmt::format("Device type: {}\n", dev->hw_type);
     std::cout << fmt::format("Device revision: {}.{}.{}\n",
@@ -13,5 +14,5 @@ int main() {
   } else {
     std::cout << "No Effective Range device found.\n";
   }
-  return 0;
+  return dev ? 0 : 1;
 }

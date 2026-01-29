@@ -3,11 +3,14 @@
 
 #include <er/hwinfo.hpp>
 
+#include <array>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 
 #include <arpa/inet.h>
+#include <sys/wait.h>
 
 namespace {
 
@@ -476,6 +479,206 @@ TEST_CASE("get returns empty pins when device revision is lower than all hwdb re
   REQUIRE(result->pins.size() == 1);
 }
 
+TEST_CASE("get finds exact revision match", "[get]") {
+  TempDir temp;
+  // Device has version 1.2.3, hwdb has exactly 1.2.3
+  create_device_tree(temp.path(), "test-board", 1, 2, 3);
+  write_text_file(temp.path() / "schema.json", valid_schema);
+  write_text_file(temp.path() / "hwdb.json", R"({
+    "test-board": {
+      "1.0.0": {
+        "pins": {
+          "OLD_PIN": { "description": "Old pin", "value": 10 }
+        }
+      },
+      "1.2.3": {
+        "pins": {
+          "EXACT_PIN": { "description": "Exact match", "value": 20 }
+        }
+      },
+      "1.5.0": {
+        "pins": {
+          "NEW_PIN": { "description": "New pin", "value": 30 }
+        }
+      }
+    }
+  })");
+
+  auto result = er::hwinfo::get(temp.path(), temp.path() / "hwdb.json",
+                                temp.path() / "schema.json");
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->pins.size() == 1);
+  REQUIRE(result->pins.begin()->name == "EXACT_PIN");
+}
+
+TEST_CASE("get uses backward search when lower_bound finds different major",
+          "[get]") {
+  TempDir temp;
+  // Device has version 1.9.0, hwdb has 1.5.0 and 2.0.0
+  // lower_bound returns 2.0.0 (different major), backward search finds 1.5.0
+  create_device_tree(temp.path(), "test-board", 1, 9, 0);
+  write_text_file(temp.path() / "schema.json", valid_schema);
+  write_text_file(temp.path() / "hwdb.json", R"({
+    "test-board": {
+      "1.5.0": {
+        "pins": {
+          "V1_PIN": { "description": "Version 1 pin", "value": 10 }
+        }
+      },
+      "2.0.0": {
+        "pins": {
+          "V2_PIN": { "description": "Version 2 pin", "value": 20 }
+        }
+      }
+    }
+  })");
+
+  auto result = er::hwinfo::get(temp.path(), temp.path() / "hwdb.json",
+                                temp.path() / "schema.json");
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->pins.size() == 1);
+  REQUIRE(result->pins.begin()->name == "V1_PIN");
+}
+
+TEST_CASE("get uses backward search when lower_bound returns end", "[get]") {
+  TempDir temp;
+  // Device has version 1.9.0, hwdb only has 1.5.0
+  // lower_bound returns end(), backward search finds 1.5.0
+  create_device_tree(temp.path(), "test-board", 1, 9, 0);
+  write_text_file(temp.path() / "schema.json", valid_schema);
+  write_text_file(temp.path() / "hwdb.json", R"({
+    "test-board": {
+      "1.5.0": {
+        "pins": {
+          "ONLY_PIN": { "description": "Only pin", "value": 10 }
+        }
+      }
+    }
+  })");
+
+  auto result = er::hwinfo::get(temp.path(), temp.path() / "hwdb.json",
+                                temp.path() / "schema.json");
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->pins.size() == 1);
+  REQUIRE(result->pins.begin()->name == "ONLY_PIN");
+}
+
+TEST_CASE("get backward search selects highest revision with matching major",
+          "[get]") {
+  TempDir temp;
+  // Device has version 1.9.0, hwdb has 1.2.0, 1.5.0, 2.0.0
+  // lower_bound returns 2.0.0, backward search should find 1.5.0 (highest 1.x)
+  create_device_tree(temp.path(), "test-board", 1, 9, 0);
+  write_text_file(temp.path() / "schema.json", valid_schema);
+  write_text_file(temp.path() / "hwdb.json", R"({
+    "test-board": {
+      "1.2.0": {
+        "pins": {
+          "LOW_PIN": { "description": "Low version", "value": 10 }
+        }
+      },
+      "1.5.0": {
+        "pins": {
+          "MID_PIN": { "description": "Mid version", "value": 20 }
+        }
+      },
+      "2.0.0": {
+        "pins": {
+          "HIGH_PIN": { "description": "High version", "value": 30 }
+        }
+      }
+    }
+  })");
+
+  auto result = er::hwinfo::get(temp.path(), temp.path() / "hwdb.json",
+                                temp.path() / "schema.json");
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->pins.size() == 1);
+  REQUIRE(result->pins.begin()->name == "MID_PIN");
+}
+
+TEST_CASE("get selects correct major version from multiple majors", "[get]") {
+  TempDir temp;
+  // Device has version 2.5.0, hwdb has 1.9.0, 2.1.0, 2.8.0
+  // Should match 2.8.0 (first >= 2.5.0 with same major)
+  create_device_tree(temp.path(), "test-board", 2, 5, 0);
+  write_text_file(temp.path() / "schema.json", valid_schema);
+  write_text_file(temp.path() / "hwdb.json", R"({
+    "test-board": {
+      "1.9.0": {
+        "pins": {
+          "V1_PIN": { "description": "Version 1", "value": 10 }
+        }
+      },
+      "2.1.0": {
+        "pins": {
+          "V2_LOW_PIN": { "description": "Version 2 low", "value": 20 }
+        }
+      },
+      "2.8.0": {
+        "pins": {
+          "V2_HIGH_PIN": { "description": "Version 2 high", "value": 30 }
+        }
+      }
+    }
+  })");
+
+  auto result = er::hwinfo::get(temp.path(), temp.path() / "hwdb.json",
+                                temp.path() / "schema.json");
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->pins.size() == 1);
+  REQUIRE(result->pins.begin()->name == "V2_HIGH_PIN");
+}
+
+TEST_CASE("get returns empty pins when type has no revisions", "[get]") {
+  TempDir temp;
+  // Device has version 1.0.0, hwdb has the type but no revisions
+  create_device_tree(temp.path(), "test-board", 1, 0, 0);
+  write_text_file(temp.path() / "schema.json", valid_schema);
+  write_text_file(temp.path() / "hwdb.json", R"({
+    "test-board": {}
+  })");
+
+  auto result = er::hwinfo::get(temp.path(), temp.path() / "hwdb.json",
+                                temp.path() / "schema.json");
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->pins.empty());
+}
+
+TEST_CASE("get returns empty pins when device major exceeds all hwdb majors",
+          "[get]") {
+  TempDir temp;
+  // Device has version 3.0.0, hwdb only has 1.x and 2.x
+  create_device_tree(temp.path(), "test-board", 3, 0, 0);
+  write_text_file(temp.path() / "schema.json", valid_schema);
+  write_text_file(temp.path() / "hwdb.json", R"({
+    "test-board": {
+      "1.5.0": {
+        "pins": {
+          "V1_PIN": { "description": "Version 1", "value": 10 }
+        }
+      },
+      "2.5.0": {
+        "pins": {
+          "V2_PIN": { "description": "Version 2", "value": 20 }
+        }
+      }
+    }
+  })");
+
+  auto result = er::hwinfo::get(temp.path(), temp.path() / "hwdb.json",
+                                temp.path() / "schema.json");
+
+  REQUIRE(result.has_value());
+  REQUIRE(result->pins.empty());
+}
+
 // --- Tests for er::hwinfo::impl::extract_revision ---
 
 TEST_CASE("extract_revision parses valid revision string",
@@ -547,4 +750,105 @@ TEST_CASE("extract_revision throws on non-numeric patch",
           "[extract_revision]") {
   REQUIRE_THROWS_AS(er::hwinfo::impl::extract_revision("1.2.c"),
                     std::runtime_error);
+}
+
+// --- Tests for er::hwinfo::pin_set transparent lookup ---
+
+TEST_CASE("pin_set supports transparent lookup by name", "[pin_set]") {
+  er::hwinfo::pin_set pins;
+  pins.insert({.name = "LED", .number = 17, .description = "Status LED"});
+  pins.insert({.name = "BUTTON", .number = 27, .description = "User button"});
+  pins.insert({.name = "RELAY", .number = 22, .description = "Power relay"});
+
+  SECTION("find by string_view returns correct pin") {
+    auto it = pins.find(std::string_view("BUTTON"));
+    REQUIRE(it != pins.end());
+    REQUIRE(it->name == "BUTTON");
+    REQUIRE(it->number == 27);
+  }
+
+  SECTION("find by string returns correct pin") {
+    std::string name = "RELAY";
+    auto it = pins.find(name);
+    REQUIRE(it != pins.end());
+    REQUIRE(it->name == "RELAY");
+    REQUIRE(it->number == 22);
+  }
+
+  SECTION("find by string literal returns correct pin") {
+    auto it = pins.find("LED");
+    REQUIRE(it != pins.end());
+    REQUIRE(it->name == "LED");
+    REQUIRE(it->number == 17);
+  }
+
+  SECTION("find returns end for non-existent name") {
+    auto it = pins.find("NONEXISTENT");
+    REQUIRE(it == pins.end());
+  }
+
+  SECTION("contains by name works correctly") {
+    REQUIRE(pins.contains("LED"));
+    REQUIRE(pins.contains("BUTTON"));
+    REQUIRE_FALSE(pins.contains("MISSING"));
+  }
+}
+
+// --- Integration tests for er-hwinfo CLI ---
+
+namespace {
+struct cli_result {
+  std::string output;
+  int exit_code;
+};
+
+cli_result run_cli(const std::string &args) {
+  std::string cmd = "../er-hwinfo " + args + " 2>&1";
+  std::array<char, 256> buffer;
+  std::string result;
+  FILE *pipe = popen(cmd.c_str(), "r");
+  if (!pipe) {
+    throw std::runtime_error("popen() failed");
+  }
+  while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
+    result += buffer.data();
+  }
+  int status = pclose(pipe);
+  int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+  return {result, exit_code};
+}
+} // namespace
+
+TEST_CASE("CLI outputs device info when device tree exists", "[cli]") {
+  TempDir temp;
+  create_device_tree(temp.path(), "test-board", 1, 2, 3);
+
+  auto [output, exit_code] = run_cli(temp.path().string());
+
+  REQUIRE(output.find("Device type: test-board") != std::string::npos);
+  REQUIRE(output.find("Device revision: 1.2.3") != std::string::npos);
+  REQUIRE(exit_code == 0);
+}
+
+TEST_CASE("CLI outputs not found message when device tree missing", "[cli]") {
+  TempDir temp;
+  // Don't create device tree files
+
+  auto [output, exit_code] = run_cli(temp.path().string());
+
+  REQUIRE(output.find("No Effective Range device found") != std::string::npos);
+  REQUIRE(exit_code == 1);
+}
+
+TEST_CASE("CLI handles default path gracefully", "[cli]") {
+  // Run without arguments - will use /proc/device-tree
+  // On non-ER hardware, should report "not found"
+  auto [output, exit_code] = run_cli("");
+
+  // Should either find a device or report not found (both are valid)
+  bool found_device = output.find("Device type:") != std::string::npos;
+  bool not_found = output.find("No Effective Range device found") != std::string::npos;
+  REQUIRE((found_device || not_found));
+  // Exit code should match: 0 if found, 1 if not found
+  REQUIRE(((found_device && exit_code == 0) || (not_found && exit_code == 1)));
 }

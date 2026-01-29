@@ -1,7 +1,6 @@
 {
-    "mrcm": [
-        {
-            "revision": "0.5.0",
+    "mrcm": {
+        "0.5.0": {
             "pins": {
                 "ICSP_PI_CLK": {
                     "description": "Clock pin for the ICSP programming of the onboard PIC MCU",
@@ -9,5 +8,5 @@
                 }
             }
         }
-    ]
+    }
 }

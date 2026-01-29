@@ -5,16 +5,15 @@
   "description": "Schema for hardware description database",
   "type": "object",
   "additionalProperties": {
-    "type": "array",
-    "description": "Array of hardware revisions for a given hardware type",
-    "items": {
+    "type": "object",
+    "description": "Hardware revisions keyed by semantic version string",
+    "propertyNames": {
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "additionalProperties": {
       "type": "object",
+      "description": "Hardware revision definition",
       "properties": {
-        "revision": {
-          "type": "string",
-          "description": "Semantic version of the hardware revision",
-          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
-        },
         "pins": {
           "type": "object",
           "description": "Pin definitions for this hardware revision",
@@ -36,9 +35,8 @@
           }
         }
       },
-      "required": ["revision", "pins"],
+      "required": ["pins"],
       "additionalProperties": false
-    },
-    "minItems": 1
+    }
   }
 }

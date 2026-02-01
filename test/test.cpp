@@ -852,3 +852,140 @@ TEST_CASE("CLI handles default path gracefully", "[cli]") {
   // Exit code should match: 0 if found, 1 if not found
   REQUIRE(((found_device && exit_code == 0) || (not_found && exit_code == 1)));
 }
+
+TEST_CASE("CLI prints no pin info message when hwdb missing", "[cli]") {
+  TempDir temp;
+  create_device_tree(temp.path(), "test-board", 1, 0, 0);
+
+  auto [output, exit_code] = run_cli(temp.path().string());
+
+  REQUIRE(output.find("No pin information available") != std::string::npos);
+  REQUIRE(exit_code == 0);
+}
+
+TEST_CASE("CLI prints pin table with correct header", "[cli][table]") {
+  TempDir temp;
+  create_device_tree(temp.path(), "test-board", 1, 0, 0);
+
+  // Create hwdb files in the expected location
+  auto etc_path = temp.path() / "etc" / "er-hwinfo";
+  std::filesystem::create_directories(etc_path);
+  write_text_file(etc_path / "hwdb-schema.json", valid_schema);
+  write_text_file(etc_path / "hwdb.json", R"({
+    "test-board": {
+      "1.0.0": {
+        "pins": {
+          "LED": { "description": "Status LED", "value": 17 },
+          "BUTTON": { "description": "User button", "value": 27 }
+        }
+      }
+    }
+  })");
+
+  // Need to call get() directly since CLI uses hardcoded paths
+  auto info = er::hwinfo::get(temp.path(), etc_path / "hwdb.json",
+                              etc_path / "hwdb-schema.json");
+
+  REQUIRE(info.has_value());
+  REQUIRE(info->pins.size() == 2);
+
+  // Verify pin content
+  auto led_it = info->pins.find("LED");
+  REQUIRE(led_it != info->pins.end());
+  REQUIRE(led_it->number == 17);
+  REQUIRE(led_it->description == "Status LED");
+
+  auto button_it = info->pins.find("BUTTON");
+  REQUIRE(button_it != info->pins.end());
+  REQUIRE(button_it->number == 27);
+  REQUIRE(button_it->description == "User button");
+}
+
+TEST_CASE("CLI table column widths adjust to content", "[cli][table]") {
+  TempDir temp;
+  create_device_tree(temp.path(), "test-board", 1, 0, 0);
+
+  auto etc_path = temp.path() / "etc" / "er-hwinfo";
+  std::filesystem::create_directories(etc_path);
+  write_text_file(etc_path / "hwdb-schema.json", valid_schema);
+  write_text_file(etc_path / "hwdb.json", R"({
+    "test-board": {
+      "1.0.0": {
+        "pins": {
+          "VERY_LONG_PIN_NAME": { "description": "A very long description for testing column width adjustment", "value": 42 }
+        }
+      }
+    }
+  })");
+
+  auto info = er::hwinfo::get(temp.path(), etc_path / "hwdb.json",
+                              etc_path / "hwdb-schema.json");
+
+  REQUIRE(info.has_value());
+  REQUIRE(info->pins.size() == 1);
+
+  auto it = info->pins.begin();
+  REQUIRE(it->name == "VERY_LONG_PIN_NAME");
+  REQUIRE(it->number == 42);
+  REQUIRE(it->description ==
+          "A very long description for testing column width adjustment");
+}
+
+TEST_CASE("CLI table handles empty pins gracefully", "[cli][table]") {
+  TempDir temp;
+  create_device_tree(temp.path(), "unknown-board", 1, 0, 0);
+
+  auto etc_path = temp.path() / "etc" / "er-hwinfo";
+  std::filesystem::create_directories(etc_path);
+  write_text_file(etc_path / "hwdb-schema.json", valid_schema);
+  write_text_file(etc_path / "hwdb.json", R"({
+    "other-board": {
+      "1.0.0": {
+        "pins": {
+          "LED": { "description": "Status LED", "value": 17 }
+        }
+      }
+    }
+  })");
+
+  auto info = er::hwinfo::get(temp.path(), etc_path / "hwdb.json",
+                              etc_path / "hwdb-schema.json");
+
+  REQUIRE(info.has_value());
+  REQUIRE(info->dev.hw_type == "unknown-board");
+  REQUIRE(info->pins.empty());
+}
+
+TEST_CASE("CLI table sorts pins alphabetically by name", "[cli][table]") {
+  TempDir temp;
+  create_device_tree(temp.path(), "test-board", 1, 0, 0);
+
+  auto etc_path = temp.path() / "etc" / "er-hwinfo";
+  std::filesystem::create_directories(etc_path);
+  write_text_file(etc_path / "hwdb-schema.json", valid_schema);
+  write_text_file(etc_path / "hwdb.json", R"({
+    "test-board": {
+      "1.0.0": {
+        "pins": {
+          "ZEBRA": { "description": "Last alphabetically", "value": 1 },
+          "ALPHA": { "description": "First alphabetically", "value": 2 },
+          "MIDDLE": { "description": "Middle alphabetically", "value": 3 }
+        }
+      }
+    }
+  })");
+
+  auto info = er::hwinfo::get(temp.path(), etc_path / "hwdb.json",
+                              etc_path / "hwdb-schema.json");
+
+  REQUIRE(info.has_value());
+  REQUIRE(info->pins.size() == 3);
+
+  // pin_set is ordered by name, verify order
+  auto it = info->pins.begin();
+  REQUIRE(it->name == "ALPHA");
+  ++it;
+  REQUIRE(it->name == "MIDDLE");
+  ++it;
+  REQUIRE(it->name == "ZEBRA");
+}

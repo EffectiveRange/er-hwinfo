@@ -4,7 +4,7 @@
             "pins": {
                 "ICSP_CLK": {
                     "description": "Clock pin for ICSP programming of the onboard PIC MCU",
-                    "value": 19
+                    "value": 27
                 },
                 "ICSP_DATA": {
                     "description": "Data pin for ICSP programming of the onboard PIC MCU",

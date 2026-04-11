@@ -19,6 +19,26 @@
                     "value": 5
                 }
             }
+        },
+        "1.0.0": {
+            "pins": {
+                "ICSP_CLK": {
+                    "description": "Clock pin for ICSP programming of the onboard PIC MCU",
+                    "value": 27
+                },
+                "ICSP_DATA": {
+                    "description": "Data pin for ICSP programming of the onboard PIC MCU",
+                    "value": 17
+                },
+                "ICSP_PROG_EN": {
+                    "description": "Program enable pin for ICSP programming of the onboard PIC MCU",
+                    "value": 22
+                },
+                "ICSP_MCLR": {
+                    "description": "Master clear (reset) pin for ICSP programming of the onboard PIC MCU",
+                    "value": 5
+                }
+            }
         }
     }
 }
